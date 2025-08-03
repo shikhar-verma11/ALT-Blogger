@@ -1,0 +1,5 @@
+{
+  "name": "ALT Blogger",
+  "description": "A modern, fully functional blogging platform built with React and Tailwind CSS. It features user authentication, post creation, and interaction features like liking and saving posts.",
+  "requestFramePermissions": []
+}
