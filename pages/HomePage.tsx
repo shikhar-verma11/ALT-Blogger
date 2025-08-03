@@ -1,23 +1,42 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Post } from '../types';
 import PostCard from '../components/PostCard';
-import { mockApi } from '../services/mockApi';
+import { db } from '../firebase'; // Import the Firestore instance
+import { collection, getDocs, query, orderBy } from 'firebase/firestore'; // Import Firestore functions
 
 const HomePage: React.FC = () => {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchPosts = useCallback(async () => {
-    // No need to set loading to true here, causes flicker on interaction
-    const fetchedPosts = await mockApi.getPosts();
-    setPosts(fetchedPosts);
-    setLoading(false);
-  }, []);
-
+  // This useEffect hook now fetches posts from Firestore when the component loads
   useEffect(() => {
-    setLoading(true);
+    const fetchPosts = async () => {
+      try {
+        // Create a query to get posts, ordered by creation date (newest first)
+        const postsQuery = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+        
+        const querySnapshot = await getDocs(postsQuery);
+        
+        // Map the documents from Firestore to an array that matches your 'Post' type
+        const postsData = querySnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            // Convert Firestore Timestamp to Date if needed, or handle it in PostCard
+            ...data
+          } as Post;
+        });
+        
+        setPosts(postsData);
+      } catch (error) {
+        console.error("Error fetching posts from Firestore:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchPosts();
-  }, [fetchPosts]);
+  }, []); // The empty array [] ensures this effect runs only once on mount
 
   if (loading) {
     return (
@@ -55,7 +74,9 @@ const HomePage: React.FC = () => {
       {posts.length > 0 ? (
         <div className="columns-1 md:columns-2 gap-8">
           {posts.map(post => (
-            <PostCard key={post.id} post={post} onInteraction={fetchPosts} />
+            // The onInteraction prop is removed for now, as data will be fresh on page load.
+            // A better approach later would be real-time updates with Firestore.
+            <PostCard key={post.id} post={post} />
           ))}
         </div>
       ) : (

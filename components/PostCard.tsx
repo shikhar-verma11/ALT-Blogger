@@ -2,9 +2,10 @@ import React, { useContext, useState, useEffect } from 'react';
 import type { Post } from '../types';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
-import { mockApi } from '../services/mockApi';
+import { db } from '../firebase'; // Import Firestore
+import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore'; // Import Firestore functions
 
-// Icon components
+// Icon components (no changes here)
 const HeartIcon: React.FC<{solid: boolean}> = ({solid}) => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill={solid ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z" />
@@ -19,42 +20,72 @@ const BookmarkIcon: React.FC<{solid: boolean}> = ({solid}) => (
 
 interface PostCardProps {
   post: Post;
-  onInteraction: () => void;
+  // onInteraction is removed as we now update state directly
 }
 
-const PostCard: React.FC<PostCardProps> = ({ post, onInteraction }) => {
+const PostCard: React.FC<PostCardProps> = ({ post }) => {
   const authContext = useContext(AuthContext);
   const user = authContext?.user;
 
-  const [likeCount, setLikeCount] = useState(post.likes.length);
-  const [isLiked, setIsLiked] = useState(user ? post.likes.includes(user.id) : false);
-  const [isSaved, setIsSaved] = useState(user ? post.saves.includes(user.id) : false);
+  // --- UPDATED to be safer with default values ---
+  const [likeCount, setLikeCount] = useState(post.likes?.length ?? 0);
+  const [isLiked, setIsLiked] = useState(user ? post.likes?.includes(user.id) : false);
+  const [isSaved, setIsSaved] = useState(user ? post.saves?.includes(user.id) : false);
 
+  // This effect ensures the state is correct if the post prop changes
   useEffect(() => {
-    setIsLiked(user ? post.likes.includes(user.id) : false);
-    setIsSaved(user ? post.saves.includes(user.id) : false);
-    setLikeCount(post.likes.length);
+    setIsLiked(user ? post.likes?.includes(user.id) : false);
+    setIsSaved(user ? post.saves?.includes(user.id) : false);
+    setLikeCount(post.likes?.length ?? 0);
   }, [post, user]);
 
-
+  // --- UPDATED to use Firestore ---
   const handleLike = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!user) return; // Or prompt to login
-    const updatedPost = await mockApi.toggleLike(post.id, user.id);
-    setIsLiked(updatedPost.likes.includes(user.id));
-    setLikeCount(updatedPost.likes.length);
-    onInteraction();
+    if (!user) return;
+
+    const postRef = doc(db, "posts", post.id);
+    if (isLiked) {
+      // Unlike the post
+      await updateDoc(postRef, {
+        likes: arrayRemove(user.id)
+      });
+      setLikeCount(prev => prev - 1);
+    } else {
+      // Like the post
+      await updateDoc(postRef, {
+        likes: arrayUnion(user.id)
+      });
+      setLikeCount(prev => prev + 1);
+    }
+    setIsLiked(prev => !prev);
   };
 
+  // --- UPDATED to use Firestore ---
   const handleSave = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!user) return;
-    await mockApi.toggleSave(post.id, user.id);
+
+    const postRef = doc(db, "posts", post.id);
+    if (isSaved) {
+      // Unsave the post
+      await updateDoc(postRef, {
+        saves: arrayRemove(user.id)
+      });
+    } else {
+      // Save the post
+      await updateDoc(postRef, {
+        saves: arrayUnion(user.id)
+      });
+    }
     setIsSaved(prev => !prev);
-    onInteraction();
   };
+  
+  // --- UPDATED to handle potentially missing 'createdAt' and convert it ---
+  // The 'createdAt' from Firestore is an object, so we convert it to a Date
+  const postDate = post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : 'Just now';
 
   return (
     <div className="w-full break-inside-avoid mb-8 animate-fade-in-up">
@@ -65,12 +96,12 @@ const PostCard: React.FC<PostCardProps> = ({ post, onInteraction }) => {
             )}
             <div className="p-6">
               <div className="flex items-center mb-4">
-                 <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-sm mr-3">
-                      {post.authorUsername.charAt(0).toUpperCase()}
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-sm mr-3">
+                      {post.authorUsername?.charAt(0).toUpperCase()}
                   </div>
                   <div>
                       <p className="text-sm font-semibold text-light-text dark:text-dark-text">{post.authorUsername}</p>
-                      <p className="text-xs text-light-subtle dark:text-dark-subtle">{new Date(post.createdAt).toLocaleDateString()}</p>
+                      <p className="text-xs text-light-subtle dark:text-dark-subtle">{postDate}</p>
                   </div>
               </div>
 
@@ -82,7 +113,8 @@ const PostCard: React.FC<PostCardProps> = ({ post, onInteraction }) => {
               </p>
               
               <div className="mt-4 flex flex-wrap gap-2">
-                {post.hashtags.map(tag => (
+                {/* --- UPDATED to safely handle missing hashtags --- */}
+                {(post.hashtags || []).map(tag => (
                     <span key={tag} className="text-xs font-medium bg-brand-purple/10 text-brand-purple px-2 py-1 rounded-full">#{tag}</span>
                 ))}
               </div>
