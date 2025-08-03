@@ -22,6 +22,7 @@ const AuthPage: React.FC = () => {
   if (!authContext) return null;
   const { login, signup } = authContext;
 
+  // --- THIS IS THE UPDATED FUNCTION ---
   const handleSubmit = async () => {
     setError('');
     setLoading(true);
@@ -34,19 +35,19 @@ const AuthPage: React.FC = () => {
 
     try {
       if (isLogin) {
-        const user = await login(email, password);
-        if (user) {
-          navigate('/profile');
-        } else {
-          setError('Invalid credentials. Please check your email and password.');
-        }
+        await login(email, password);
       } else {
-        const user = await signup(username, email, password);
-        if (user) {
-          navigate('/profile');
-        }
+        await signup(username, email, password);
       }
+      // If the above functions complete without error, the user is logged in.
+      // The onAuthStateChanged listener in your context will update the state,
+      // and the app will re-render. We can navigate them away.
+      navigate('/profile');
+
     } catch (err: any) {
+      // Firebase provides user-friendly error messages
+      // e.g., "Firebase: Error (auth/wrong-password)."
+      // We can display this directly.
       setError(err.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
@@ -70,13 +71,13 @@ const AuthPage: React.FC = () => {
         
         {error && (
              <div className="bg-red-500/10 dark:bg-red-500/20 border-l-4 border-red-500 text-red-700 dark:text-red-300 p-4 mb-6" role="alert">
-                <div className="flex">
-                    <div className="py-1"><ErrorIcon /></div>
-                    <div>
-                        <p className="font-bold">An error occurred</p>
-                        <p className="text-sm">{error}</p>
-                    </div>
-                </div>
+               <div className="flex">
+                   <div className="py-1"><ErrorIcon /></div>
+                   <div>
+                       <p className="font-bold">An error occurred</p>
+                       <p className="text-sm">{error}</p>
+                   </div>
+               </div>
             </div>
         )}
         

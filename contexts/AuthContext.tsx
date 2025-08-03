@@ -1,13 +1,22 @@
-import React, { createContext, useState, useEffect, useCallback } from 'react';
-import type { AuthUser } from '../types';
-import { mockApi } from '../services/mockApi';
+import React, { createContext, useState, useEffect } from 'react';
+import { 
+    getAuth, 
+    onAuthStateChanged, 
+    createUserWithEmailAndPassword, 
+    signInWithEmailAndPassword, 
+    signOut,
+    updateProfile,
+    User as FirebaseUser // Rename the import
+} from "firebase/auth";
+import type { AuthUser } from '../types'; // Import your custom user type
+import {app} from '../firebase';
 
 interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
-  login: (email: string, password_in: string) => Promise<AuthUser | null>;
-  signup: (username: string, email: string, password_in: string) => Promise<AuthUser | null>;
-  logout: () => void;
+  login: (email: string, password_in: string) => Promise<void>;
+  signup: (username: string, email: string, password_in: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -15,52 +24,43 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const auth = getAuth(app);
 
   useEffect(() => {
-    try {
-      const storedUser = window.localStorage.getItem('blog_session');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        // Create an AuthUser object that matches your app's structure
+        const appUser: AuthUser = {
+          id: firebaseUser.uid,
+          username: firebaseUser.displayName || 'No Name', // Fallback for username
+          email: firebaseUser.email || '', // Fallback for email
+        };
+        setUser(appUser);
+      } else {
+        setUser(null);
       }
-    } catch (error) {
-      console.error("Failed to parse user from localStorage", error);
-      window.localStorage.removeItem('blog_session');
-    } finally {
       setLoading(false);
-    }
-  }, []);
+    });
 
-  const login = useCallback(async (email: string, password_in: string) => {
-    setLoading(true);
-    const foundUser = await mockApi.login(email, password_in);
-    if (foundUser) {
-      setUser(foundUser);
-      window.localStorage.setItem('blog_session', JSON.stringify(foundUser));
-      setLoading(false);
-      return foundUser;
-    }
-    setLoading(false);
-    return null;
-  }, []);
+    return () => unsubscribe();
+  }, [auth]);
 
-  const signup = useCallback(async (username: string, email: string, password_in: string) => {
-    setLoading(true);
-    try {
-        const newUser = await mockApi.signup({ username, email, password: password_in });
-        setUser(newUser);
-        window.localStorage.setItem('blog_session', JSON.stringify(newUser));
-        return newUser;
-    } catch (error) {
-        throw error; // re-throw to be caught in the form
-    } finally {
-        setLoading(false);
-    }
-  }, []);
+  const login = async (email: string, password_in: string) => {
+    await signInWithEmailAndPassword(auth, email, password_in);
+  };
 
-  const logout = useCallback(() => {
-    setUser(null);
-    window.localStorage.removeItem('blog_session');
-  }, []);
+  const signup = async (username: string, email: string, password_in: string) => {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password_in);
+    if (userCredential.user) {
+      await updateProfile(userCredential.user, {
+        displayName: username
+      });
+    }
+  };
+
+  const logout = async () => {
+    await signOut(auth);
+  };
 
   return (
     <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
