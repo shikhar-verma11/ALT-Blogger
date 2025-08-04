@@ -6,10 +6,10 @@ import {
     signInWithEmailAndPassword, 
     signOut,
     updateProfile,
-    User as FirebaseUser // Rename the import
+    User as FirebaseUser
 } from "firebase/auth";
-import type { AuthUser } from '../types'; // Import your custom user type
-import {app} from '../firebase';
+import type { AuthUser } from '../types';
+import { app } from '../firebase';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -29,11 +29,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        // Create an AuthUser object that matches your app's structure
         const appUser: AuthUser = {
           id: firebaseUser.uid,
-          username: firebaseUser.displayName || 'No Name', // Fallback for username
-          email: firebaseUser.email || '', // Fallback for email
+          username: firebaseUser.displayName || 'No Name',
+          email: firebaseUser.email || '',
         };
         setUser(appUser);
       } else {
@@ -49,12 +48,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await signInWithEmailAndPassword(auth, email, password_in);
   };
 
+  // --- THIS FUNCTION IS UPDATED ---
   const signup = async (username: string, email: string, password_in: string) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password_in);
+    
     if (userCredential.user) {
+      // 1. Wait for the profile to be updated
       await updateProfile(userCredential.user, {
         displayName: username
       });
+      // 2. Force a reload of the user data to get the new displayName
+      await userCredential.user.reload();
+      // 3. Manually update our app's state with the now-complete user object
+      const firebaseUser = auth.currentUser;
+      if (firebaseUser) {
+          const appUser: AuthUser = {
+              id: firebaseUser.uid,
+              username: firebaseUser.displayName || 'No Name',
+              email: firebaseUser.email || '',
+          };
+          setUser(appUser);
+      }
     }
   };
 
