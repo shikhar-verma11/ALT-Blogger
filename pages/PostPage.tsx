@@ -1,9 +1,20 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import type { Post, Comment } from '../types';
-import { mockApi } from '../services/mockApi';
 import { AuthContext } from '../contexts/AuthContext';
+import { db } from '../firebase'; // Import Firestore
+import { 
+    doc, 
+    getDoc, 
+    collection, 
+    addDoc, 
+    query, 
+    orderBy, 
+    getDocs, 
+    serverTimestamp 
+} from 'firebase/firestore';
 
+// --- UPDATED CommentSection to use Firestore ---
 const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
     const [comments, setComments] = useState<Comment[]>([]);
     const [newComment, setNewComment] = useState('');
@@ -12,7 +23,13 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
     const user = authContext?.user;
 
     const fetchComments = useCallback(async () => {
-        const fetchedComments = await mockApi.getCommentsForPost(postId);
+        // Comments are stored in a sub-collection inside each post document
+        const commentsQuery = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "asc"));
+        const querySnapshot = await getDocs(commentsQuery);
+        const fetchedComments = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        } as Comment));
         setComments(fetchedComments);
     }, [postId]);
 
@@ -23,14 +40,18 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
     const handleSubmitComment = async () => {
         if (!newComment.trim() || !user) return;
         setLoading(true);
-        await mockApi.addComment({
+        
+        // Add a new comment to the sub-collection
+        await addDoc(collection(db, "posts", postId, "comments"), {
             postId,
             authorId: user.id,
             authorUsername: user.username,
             content: newComment,
+            createdAt: serverTimestamp()
         });
+        
         setNewComment('');
-        await fetchComments();
+        await fetchComments(); // Refresh comments after posting
         setLoading(false);
     };
 
@@ -39,20 +60,20 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
             <h3 className="font-display text-2xl font-bold mb-6">Discussion ({comments.length})</h3>
             {user ? (
                  <div className="mb-8">
-                    <textarea 
-                        rows={3} 
-                        value={newComment}
-                        onChange={e => setNewComment(e.target.value)}
-                        placeholder="Join the discussion..."
-                        className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-purple"
-                    />
-                    <button 
-                        onClick={handleSubmitComment} 
-                        disabled={loading || !newComment.trim()}
-                        className="mt-3 py-2 px-6 rounded-lg font-semibold text-white bg-brand-purple hover:opacity-90 disabled:opacity-60 transition-all"
-                    >
-                        {loading ? 'Posting...' : 'Post Comment'}
-                    </button>
+                     <textarea 
+                         rows={3} 
+                         value={newComment}
+                         onChange={e => setNewComment(e.target.value)}
+                         placeholder="Join the discussion..."
+                         className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-purple"
+                     />
+                     <button 
+                         onClick={handleSubmitComment} 
+                         disabled={loading || !newComment.trim()}
+                         className="mt-3 py-2 px-6 rounded-lg font-semibold text-white bg-brand-purple hover:opacity-90 disabled:opacity-60 transition-all"
+                     >
+                         {loading ? 'Posting...' : 'Post Comment'}
+                     </button>
                  </div>
             ) : (
                 <p className="mb-8 text-light-subtle dark:text-dark-subtle">You must be logged in to comment.</p>
@@ -62,13 +83,13 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
                 {comments.map(comment => (
                     <div key={comment.id} className="flex items-start space-x-4 animate-fade-in-up">
                         <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                          {comment.authorUsername.charAt(0).toUpperCase()}
+                            {comment.authorUsername.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1">
                             <div className="bg-light-bg dark:bg-dark-bg p-4 rounded-lg rounded-tl-none">
                                 <p className="font-semibold text-light-text dark:text-dark-text">{comment.authorUsername}</p>
                                 <p className="text-sm text-light-subtle dark:text-dark-subtle mb-2">
-                                    {new Date(comment.createdAt).toLocaleDateString()}
+                                    {comment.createdAt ? new Date((comment.createdAt as any).toDate()).toLocaleDateString() : 'Just now'}
                                 </p>
                                 <p className="text-light-text dark:text-dark-text">{comment.content}</p>
                             </div>
@@ -80,22 +101,32 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
     )
 }
 
-
+// --- UPDATED PostPage to use Firestore ---
 const PostPage: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+  const { postId } = useParams<{ postId: string }>(); // Renamed to postId for clarity
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchPost = async () => {
-      if (!id) return;
+      if (!postId) return;
       setLoading(true);
-      const fetchedPost = await mockApi.getPost(id);
-      setPost(fetchedPost || null);
+      
+      // Get a single document reference from Firestore
+      const postRef = doc(db, "posts", postId);
+      const docSnap = await getDoc(postRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setPost({ id: docSnap.id, ...data } as Post);
+      } else {
+        console.log("No such document!");
+        setPost(null);
+      }
       setLoading(false);
     };
     fetchPost();
-  }, [id]);
+  }, [postId]);
 
   if (loading) {
     return <div className="text-center py-10">Loading post...</div>;
@@ -104,6 +135,8 @@ const PostPage: React.FC = () => {
   if (!post) {
     return <div className="text-center py-10 text-red-500">Post not found.</div>;
   }
+  
+  const postDate = post.createdAt ? new Date((post.createdAt as any).toDate()).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Just now';
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -120,11 +153,11 @@ const PostPage: React.FC = () => {
                   </div>
                   <div>
                       <p className="font-semibold text-light-text dark:text-dark-text">{post.authorUsername}</p>
-                      <p className="text-sm">{new Date(post.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                      <p className="text-sm">{postDate}</p>
                   </div>
                 </div>
                  <div className="mt-4 flex flex-wrap gap-2">
-                    {post.hashtags.map(tag => (
+                    {(post.hashtags || []).map(tag => (
                         <span key={tag} className="text-xs font-medium bg-brand-purple/10 text-brand-purple px-2 py-1 rounded-full">#{tag}</span>
                     ))}
                 </div>
