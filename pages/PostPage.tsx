@@ -13,6 +13,7 @@ import {
     getDocs,
     serverTimestamp
 } from 'firebase/firestore';
+import { formatDistanceToNow } from 'date-fns'; // 1. Import the new function
 
 const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
     const [comments, setComments] = useState<Comment[]>([]);
@@ -86,7 +87,8 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
                             <div className="bg-light-bg dark:bg-dark-bg p-4 rounded-lg rounded-tl-none">
                                 <p className="font-semibold text-light-text dark:text-dark-text">{comment.authorUsername}</p>
                                 <p className="text-sm text-light-subtle dark:text-dark-subtle mb-2">
-                                    {comment.createdAt ? new Date((comment.createdAt as any).toDate()).toLocaleDateString() : 'Just now'}
+                                    {/* --- 2. THIS LINE IS UPDATED for comments --- */}
+                                    {comment.createdAt ? `${formatDistanceToNow(new Date((comment.createdAt as any).toDate()))} ago` : 'Just now'}
                                 </p>
                                 <p className="text-light-text dark:text-dark-text">{comment.content}</p>
                             </div>
@@ -102,7 +104,6 @@ const PostPage: React.FC = () => {
   const { postId } = useParams<{ postId: string }>();
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
-  // --- NEW: State to control the image modal ---
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
@@ -133,13 +134,13 @@ const PostPage: React.FC = () => {
     return <div className="text-center py-10 text-red-500">Post not found.</div>;
   }
   
-  const postDate = post.createdAt ? new Date((post.createdAt as any).toDate()).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Just now';
+  // --- 3. THIS LINE IS UPDATED for the main post ---
+  const postDate = post.createdAt?.toDate ? `${formatDistanceToNow(post.createdAt.toDate())} ago` : 'Just now';
 
   return (
     <div className="max-w-4xl mx-auto">
         <article className="bg-light-card dark:bg-dark-card rounded-2xl shadow-xl overflow-hidden">
             {post.coverImageUrl && (
-                // --- UPDATED: Image is now a button to open the modal ---
                 <button onClick={() => setIsModalOpen(true)} className="w-full block">
                     <img src={post.coverImageUrl} alt={post.title} className="w-full h-64 md:h-96 object-cover" />
                 </button>
@@ -173,11 +174,10 @@ const PostPage: React.FC = () => {
             </div>
         </article>
         
-        {/* --- NEW: Image Modal --- */}
         {isModalOpen && (
             <div 
                 className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 animate-fade-in-up"
-                onClick={() => setIsModalOpen(false)} // Close modal on background click
+                onClick={() => setIsModalOpen(false)}
             >
                 <img 
                     src={post.coverImageUrl} 

@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import { db } from '../firebase'; // Import Firestore
 import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore'; // Import Firestore functions
+import { formatDistanceToNow } from 'date-fns'; // 1. Import the new function
 
 // Icon components (no changes here)
 const HeartIcon: React.FC<{solid: boolean}> = ({solid}) => (
@@ -83,9 +84,8 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
     setIsSaved(prev => !prev);
   };
   
-  // --- UPDATED to handle potentially missing 'createdAt' and convert it ---
-  // The 'createdAt' from Firestore is an object, so we convert it to a Date
-  const postDate = post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : 'Just now';
+  // --- 2. THIS IS THE ONLY LINE THAT CHANGED ---
+  const postDate = post.createdAt?.toDate ? `${formatDistanceToNow(post.createdAt.toDate())} ago` : 'Just now';
 
   return (
     <div className="w-full break-inside-avoid mb-8 animate-fade-in-up">
