@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
 import type { Post } from '../types';
-import { mockApi } from '../services/mockApi';
 import PostCard from '../components/PostCard';
+import { db } from '../firebase';
+import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 
 type Tab = 'myPosts' | 'likedPosts' | 'savedPosts';
 
@@ -14,30 +15,50 @@ const ProfilePage: React.FC = () => {
   
   const user = authContext?.user;
 
-  const fetchPosts = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    const allPosts = await mockApi.getPosts();
-    let filteredPosts: Post[] = [];
-
-    switch (activeTab) {
-      case 'myPosts':
-        filteredPosts = allPosts.filter(p => p.authorId === user.id);
-        break;
-      case 'likedPosts':
-        filteredPosts = allPosts.filter(p => p.likes.includes(user.id));
-        break;
-      case 'savedPosts':
-        filteredPosts = allPosts.filter(p => p.saves.includes(user.id));
-        break;
-    }
-    setPosts(filteredPosts);
-    setLoading(false);
-  }, [user, activeTab]);
-
+  // This useEffect hook now runs whenever the activeTab or user changes.
   useEffect(() => {
+    const fetchPosts = async () => {
+      if (!user) return;
+      setLoading(true);
+
+      let postsQuery;
+      const postsCollection = collection(db, "posts");
+
+      switch (activeTab) {
+        case 'myPosts':
+          postsQuery = query(postsCollection, where("authorId", "==", user.id), orderBy("createdAt", "desc"));
+          break;
+        case 'likedPosts':
+          postsQuery = query(postsCollection, where("likes", "array-contains", user.id));
+          break;
+        case 'savedPosts':
+          postsQuery = query(postsCollection, where("saves", "array-contains", user.id));
+          break;
+        default:
+          postsQuery = query(postsCollection, where("authorId", "==", user.id), orderBy("createdAt", "desc"));
+      }
+
+      try {
+        const querySnapshot = await getDocs(postsQuery);
+        // --- THIS IS THE CORRECTED PART ---
+        const fetchedPosts = querySnapshot.docs.map(doc => {
+          // Explicitly cast doc.data() to the Post type
+          const data = doc.data() as Omit<Post, 'id'>;
+          return {
+            id: doc.id,
+            ...data
+          };
+        });
+        setPosts(fetchedPosts);
+      } catch (error) {
+        console.error("Error fetching posts:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchPosts();
-  }, [fetchPosts]);
+  }, [user, activeTab]); // Re-fetches when the user or active tab changes
 
   if (!user) {
     return <div className="text-center py-10">You need to be logged in to view this page.</div>;
@@ -63,7 +84,8 @@ const ProfilePage: React.FC = () => {
     return (
       <div className="columns-1 md:columns-2 gap-8 mt-6">
         {posts.map(post => (
-          <PostCard key={`${activeTab}-${post.id}`} post={post} onInteraction={fetchPosts} />
+          // The onInteraction prop is removed for a simpler data flow
+          <PostCard key={`${activeTab}-${post.id}`} post={post} />
         ))}
       </div>
     );
