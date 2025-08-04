@@ -11,9 +11,11 @@ import {
     query,
     orderBy,
     getDocs,
-    serverTimestamp
+    serverTimestamp,
+    updateDoc, // 1. Import updateDoc
+    increment // 2. Import increment
 } from 'firebase/firestore';
-import { formatDistanceToNow } from 'date-fns'; // 1. Import the new function
+import { formatDistanceToNow } from 'date-fns';
 
 const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
     const [comments, setComments] = useState<Comment[]>([]);
@@ -36,20 +38,30 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
         fetchComments();
     }, [fetchComments]);
 
+    // --- THIS FUNCTION IS UPDATED ---
     const handleSubmitComment = async () => {
         if (!newComment.trim() || !user) return;
         setLoading(true);
         
-        await addDoc(collection(db, "posts", postId, "comments"), {
+        // Get a reference to the parent post document
+        const postRef = doc(db, "posts", postId);
+
+        // Add the new comment to the sub-collection
+        await addDoc(collection(postRef, "comments"), {
             postId,
             authorId: user.id,
             authorUsername: user.username,
             content: newComment,
             createdAt: serverTimestamp()
         });
+
+        // Atomically increment the commentCount on the post
+        await updateDoc(postRef, {
+            commentCount: increment(1)
+        });
         
         setNewComment('');
-        await fetchComments();
+        await fetchComments(); // Refresh comments list
         setLoading(false);
     };
 
@@ -87,7 +99,6 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
                             <div className="bg-light-bg dark:bg-dark-bg p-4 rounded-lg rounded-tl-none">
                                 <p className="font-semibold text-light-text dark:text-dark-text">{comment.authorUsername}</p>
                                 <p className="text-sm text-light-subtle dark:text-dark-subtle mb-2">
-                                    {/* --- 2. THIS LINE IS UPDATED for comments --- */}
                                     {comment.createdAt ? `${formatDistanceToNow(new Date((comment.createdAt as any).toDate()))} ago` : 'Just now'}
                                 </p>
                                 <p className="text-light-text dark:text-dark-text">{comment.content}</p>
@@ -134,7 +145,6 @@ const PostPage: React.FC = () => {
     return <div className="text-center py-10 text-red-500">Post not found.</div>;
   }
   
-  // --- 3. THIS LINE IS UPDATED for the main post ---
   const postDate = post.createdAt?.toDate ? `${formatDistanceToNow(post.createdAt.toDate())} ago` : 'Just now';
 
   return (

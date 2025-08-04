@@ -32,14 +32,13 @@ const NewPostPage: React.FC = () => {
   
   const user = authContext?.user;
 
-  // --- NEW: Function to handle image upload ---
   const handleImageUpload = () => {
     const widget = window.cloudinary.createUploadWidget(
       {
         cloudName: 'dpbx3ka0x', 
         uploadPreset: 'lnri23lf',  
-        cropping: true, // Enable the cropping tool
-        croppingAspectRatio: 16/9, // Set a 16:9 aspect ratio for cover photos
+        cropping: true,
+        croppingAspectRatio: 16/9,
         multiple: false,
       },
       (error, result) => {
@@ -84,7 +83,8 @@ const NewPostPage: React.FC = () => {
         hashtags: hashtags,
         authorId: user.id,
         authorUsername: user.username,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        commentCount: 0 // Initialize comment count
       });
       console.log("Post successfully saved to Firestore with ID: ", docRef.id);
       navigate('/');
@@ -123,12 +123,34 @@ const NewPostPage: React.FC = () => {
           {aiLoading && <div className="mt-2 text-sm text-light-subtle dark:text-dark-subtle">Thinking of some great ideas...</div>}
           {(titleSuggestions.length > 0 || hashtagSuggestions.length > 0) && (
              <div className="mt-3 p-4 bg-light-bg dark:bg-dark-bg/50 rounded-lg border border-gray-200 dark:border-gray-800 space-y-4">
-               {/* ... suggestion buttons JSX is unchanged ... */}
+               {titleSuggestions.length > 0 && (
+                   <div>
+                       <h4 className="text-sm font-semibold mb-2 text-light-subtle dark:text-dark-subtle">Title Suggestions:</h4>
+                       <div className="flex flex-wrap gap-2">
+                           {titleSuggestions.map((s, i) => (
+                               <button key={i} onClick={() => setTitle(s)} className="text-sm bg-brand-purple/10 dark:bg-brand-purple/20 text-brand-purple py-1.5 px-3 rounded-full hover:bg-brand-purple/20 dark:hover:bg-brand-purple/30 transition-colors">
+                                   {s}
+                               </button>
+                           ))}
+                       </div>
+                   </div>
+               )}
+               {hashtagSuggestions.length > 0 && (
+                   <div>
+                        <h4 className="text-sm font-semibold mb-2 text-light-subtle dark:text-dark-subtle">Hashtag Suggestions:</h4>
+                        <div className="flex flex-wrap gap-2">
+                            {hashtagSuggestions.map((tag, i) => (
+                                <button key={i} onClick={() => toggleHashtag(tag)} className={`text-sm py-1.5 px-3 rounded-full transition-colors ${hashtags.includes(tag) ? 'bg-brand-purple text-white' : 'bg-brand-purple/10 dark:bg-brand-purple/20 text-brand-purple hover:bg-brand-purple/20'}`}>
+                                    # {tag}
+                                </button>
+                            ))}
+                        </div>
+                   </div>
+               )}
              </div>
           )}
         </div>
         
-        {/* --- THIS IS THE UPDATED IMAGE UPLOAD SECTION --- */}
         <div>
           <label className="block text-sm font-medium text-light-subtle dark:text-dark-subtle mb-2">Cover Image</label>
           {coverImageUrl && (

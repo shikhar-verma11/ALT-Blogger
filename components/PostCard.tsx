@@ -2,11 +2,17 @@ import React, { useContext, useState, useEffect } from 'react';
 import type { Post } from '../types';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
-import { db } from '../firebase'; // Import Firestore
-import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore'; // Import Firestore functions
-import { formatDistanceToNow } from 'date-fns'; // 1. Import the new function
+import { db } from '../firebase';
+import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { formatDistanceToNow } from 'date-fns';
 
-// Icon components (no changes here)
+// --- NEW: Comment Icon ---
+const CommentIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+    </svg>
+);
+
 const HeartIcon: React.FC<{solid: boolean}> = ({solid}) => (
   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill={solid ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 016.364 0L12 7.636l1.318-1.318a4.5 4.5 0 116.364 6.364L12 20.364l-7.682-7.682a4.5 4.5 0 010-6.364z" />
@@ -21,26 +27,22 @@ const BookmarkIcon: React.FC<{solid: boolean}> = ({solid}) => (
 
 interface PostCardProps {
   post: Post;
-  // onInteraction is removed as we now update state directly
 }
 
 const PostCard: React.FC<PostCardProps> = ({ post }) => {
   const authContext = useContext(AuthContext);
   const user = authContext?.user;
 
-  // --- UPDATED to be safer with default values ---
   const [likeCount, setLikeCount] = useState(post.likes?.length ?? 0);
   const [isLiked, setIsLiked] = useState(user ? post.likes?.includes(user.id) : false);
   const [isSaved, setIsSaved] = useState(user ? post.saves?.includes(user.id) : false);
 
-  // This effect ensures the state is correct if the post prop changes
   useEffect(() => {
     setIsLiked(user ? post.likes?.includes(user.id) : false);
     setIsSaved(user ? post.saves?.includes(user.id) : false);
     setLikeCount(post.likes?.length ?? 0);
   }, [post, user]);
 
-  // --- UPDATED to use Firestore ---
   const handleLike = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -48,22 +50,15 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
 
     const postRef = doc(db, "posts", post.id);
     if (isLiked) {
-      // Unlike the post
-      await updateDoc(postRef, {
-        likes: arrayRemove(user.id)
-      });
+      await updateDoc(postRef, { likes: arrayRemove(user.id) });
       setLikeCount(prev => prev - 1);
     } else {
-      // Like the post
-      await updateDoc(postRef, {
-        likes: arrayUnion(user.id)
-      });
+      await updateDoc(postRef, { likes: arrayUnion(user.id) });
       setLikeCount(prev => prev + 1);
     }
     setIsLiked(prev => !prev);
   };
 
-  // --- UPDATED to use Firestore ---
   const handleSave = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -71,30 +66,23 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
 
     const postRef = doc(db, "posts", post.id);
     if (isSaved) {
-      // Unsave the post
-      await updateDoc(postRef, {
-        saves: arrayRemove(user.id)
-      });
+      await updateDoc(postRef, { saves: arrayRemove(user.id) });
     } else {
-      // Save the post
-      await updateDoc(postRef, {
-        saves: arrayUnion(user.id)
-      });
+      await updateDoc(postRef, { saves: arrayUnion(user.id) });
     }
     setIsSaved(prev => !prev);
   };
   
-  // --- 2. THIS IS THE ONLY LINE THAT CHANGED ---
   const postDate = post.createdAt?.toDate ? `${formatDistanceToNow(post.createdAt.toDate())} ago` : 'Just now';
 
   return (
     <div className="w-full break-inside-avoid mb-8 animate-fade-in-up">
       <Link to={`/post/${post.id}`} className="block group">
-          <div className="bg-light-card dark:bg-dark-card rounded-xl shadow-lg overflow-hidden transition-all duration-300 ease-in-out hover:shadow-2xl border border-gray-200 dark:border-gray-800">
+          <div className="bg-light-card dark:bg-dark-card rounded-xl shadow-lg overflow-hidden transition-all duration-300 ease-in-out hover:shadow-2xl border border-gray-200 dark:border-gray-800 flex flex-col">
             {post.coverImageUrl && (
                 <img src={post.coverImageUrl} alt={post.title} className="w-full h-48 object-cover transition-transform duration-300 group-hover:scale-105" />
             )}
-            <div className="p-6">
+            <div className="p-6 flex flex-col flex-grow">
               <div className="flex items-center mb-4">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-sm mr-3">
                       {post.authorUsername?.charAt(0).toUpperCase()}
@@ -108,26 +96,34 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
               <h3 className="font-display text-2xl font-bold text-light-text dark:text-dark-text group-hover:text-brand-purple dark:group-hover:text-brand-purple transition-colors">
                 {post.title}
               </h3>
-              <p className="mt-2 text-light-subtle dark:text-dark-subtle line-clamp-2">
+              <p className="mt-2 text-light-subtle dark:text-dark-subtle line-clamp-2 flex-grow">
                 {post.content}
               </p>
               
               <div className="mt-4 flex flex-wrap gap-2">
-                {/* --- UPDATED to safely handle missing hashtags --- */}
                 {(post.hashtags || []).map(tag => (
                     <span key={tag} className="text-xs font-medium bg-brand-purple/10 text-brand-purple px-2 py-1 rounded-full">#{tag}</span>
                 ))}
               </div>
 
-              <div className="mt-6 flex justify-end items-center space-x-4">
-                  <button onClick={handleLike} disabled={!user} className={`flex items-center space-x-2 transition-colors ${isLiked ? 'text-red-500' : 'text-light-subtle dark:text-dark-subtle'} hover:text-red-500 disabled:opacity-50 disabled:hover:text-light-subtle`}>
-                    <HeartIcon solid={isLiked} />
-                    <span className="font-medium text-sm">{likeCount}</span>
-                  </button>
-                  <button onClick={handleSave} disabled={!user} className={`flex items-center space-x-2 transition-colors ${isSaved ? 'text-brand-yellow' : 'text-light-subtle dark:text-dark-subtle'} hover:text-brand-yellow disabled:opacity-50 disabled:hover:text-light-subtle`}>
-                    <BookmarkIcon solid={isSaved} />
-                    <span className="font-medium text-sm">Save</span>
-                  </button>
+              {/* --- THIS IS THE UPDATED FOOTER --- */}
+              <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
+                  <div className="flex items-center space-x-2 text-light-subtle dark:text-dark-subtle group-hover:text-brand-purple transition-colors">
+                    <CommentIcon />
+                    <span className="font-medium text-sm">
+                        {(post.commentCount ?? 0) > 0 ? `${post.commentCount} discussions` : 'Start a discussion'}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <button onClick={handleLike} disabled={!user} className={`flex items-center space-x-2 transition-colors ${isLiked ? 'text-red-500' : 'text-light-subtle dark:text-dark-subtle'} hover:text-red-500 disabled:opacity-50`}>
+                        <HeartIcon solid={isLiked} />
+                        <span className="font-medium text-sm">{likeCount}</span>
+                    </button>
+                    <button onClick={handleSave} disabled={!user} className={`flex items-center space-x-2 transition-colors ${isSaved ? 'text-brand-yellow' : 'text-light-subtle dark:text-dark-subtle'} hover:text-brand-yellow disabled:opacity-50`}>
+                        <BookmarkIcon solid={isSaved} />
+                        <span className="font-medium text-sm">Save</span>
+                    </button>
+                  </div>
               </div>
             </div>
           </div>
