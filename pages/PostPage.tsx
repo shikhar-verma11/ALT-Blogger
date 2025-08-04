@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import type { Post, Comment } from '../types';
 import { AuthContext } from '../contexts/AuthContext';
 import { db } from '../firebase';
@@ -12,8 +12,9 @@ import {
     orderBy,
     getDocs,
     serverTimestamp,
-    updateDoc, // 1. Import updateDoc
-    increment // 2. Import increment
+    updateDoc,
+    increment,
+    deleteDoc
 } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -38,15 +39,12 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
         fetchComments();
     }, [fetchComments]);
 
-    // --- THIS FUNCTION IS UPDATED ---
     const handleSubmitComment = async () => {
         if (!newComment.trim() || !user) return;
         setLoading(true);
         
-        // Get a reference to the parent post document
         const postRef = doc(db, "posts", postId);
 
-        // Add the new comment to the sub-collection
         await addDoc(collection(postRef, "comments"), {
             postId,
             authorId: user.id,
@@ -55,13 +53,12 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
             createdAt: serverTimestamp()
         });
 
-        // Atomically increment the commentCount on the post
         await updateDoc(postRef, {
             commentCount: increment(1)
         });
         
         setNewComment('');
-        await fetchComments(); // Refresh comments list
+        await fetchComments();
         setLoading(false);
     };
 
@@ -111,31 +108,80 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
     )
 }
 
+
 const PostPage: React.FC = () => {
   const { postId } = useParams<{ postId: string }>();
+  const navigate = useNavigate();
+  const authContext = useContext(AuthContext);
+  const user = authContext?.user;
+
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  useEffect(() => {
-    const fetchPost = async () => {
-      if (!postId) return;
-      setLoading(true);
-      
-      const postRef = doc(db, "posts", postId);
-      const docSnap = await getDoc(postRef);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedTitle, setEditedTitle] = useState('');
+  const [editedContent, setEditedContent] = useState('');
 
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setPost({ id: docSnap.id, ...data } as Post);
-      } else {
-        console.log("No such document!");
-        setPost(null);
-      }
-      setLoading(false);
-    };
-    fetchPost();
+  const fetchPost = useCallback(async () => {
+    if (!postId) return;
+    setLoading(true);
+    
+    const postRef = doc(db, "posts", postId);
+    const docSnap = await getDoc(postRef);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      setPost({ id: docSnap.id, ...data } as Post);
+    } else {
+      console.log("No such document!");
+      setPost(null);
+    }
+    setLoading(false);
   }, [postId]);
+
+  useEffect(() => {
+    fetchPost();
+  }, [fetchPost]);
+
+  const handleDeletePost = async () => {
+    if (!post) return;
+    if (window.confirm("Are you sure you want to delete this post?")) {
+        try {
+            await deleteDoc(doc(db, "posts", post.id));
+            navigate('/');
+        } catch (error) {
+            console.error("Error deleting document: ", error);
+            alert("Failed to delete post.");
+        }
+    }
+  };
+
+  const handleUpdatePost = async () => {
+    if (!post) return;
+    setLoading(true);
+    try {
+        const postRef = doc(db, "posts", post.id);
+        await updateDoc(postRef, {
+            title: editedTitle,
+            content: editedContent,
+            updatedAt: serverTimestamp()
+        });
+        await fetchPost(); // Refetch post data to show updated content
+        setIsEditing(false);
+    } catch (error) {
+        console.error("Error updating document: ", error);
+        alert("Failed to update post.");
+    }
+    setLoading(false);
+  };
+  
+  const startEditing = () => {
+    if (!post) return;
+    setEditedTitle(post.title);
+    setEditedContent(post.content);
+    setIsEditing(true);
+  }
 
   if (loading) {
     return <div className="text-center py-10">Loading post...</div>;
@@ -145,7 +191,11 @@ const PostPage: React.FC = () => {
     return <div className="text-center py-10 text-red-500">Post not found.</div>;
   }
   
-  const postDate = post.createdAt?.toDate ? `${formatDistanceToNow(post.createdAt.toDate())} ago` : 'Just now';
+  const postDate = post.updatedAt
+    ? `${formatDistanceToNow(post.updatedAt.toDate())} ago (edited)`
+    : post.createdAt?.toDate ? `${formatDistanceToNow(post.createdAt.toDate())} ago` : 'Just now';
+
+  const isAuthor = user && user.id === post.authorId;
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -157,15 +207,35 @@ const PostPage: React.FC = () => {
             )}
             <div className="p-6 sm:p-10">
               <header className="mb-8 border-b border-gray-200 dark:border-gray-800 pb-8">
-                <h1 className="font-display text-4xl md:text-5xl font-extrabold text-light-text dark:text-dark-text mb-4 leading-tight">{post.title}</h1>
-                <div className="flex items-center text-light-subtle dark:text-dark-subtle">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-lg mr-3">
-                      {post.authorUsername.charAt(0).toUpperCase()}
-                  </div>
-                  <div>
-                      <p className="font-semibold text-light-text dark:text-dark-text">{post.authorUsername}</p>
-                      <p className="text-sm">{postDate}</p>
-                  </div>
+                {isEditing ? (
+                    <div className="space-y-4">
+                        <label className="block text-sm font-medium text-light-subtle dark:text-dark-subtle">Title</label>
+                        <input 
+                            type="text" 
+                            value={editedTitle} 
+                            onChange={(e) => setEditedTitle(e.target.value)}
+                            className="w-full text-4xl font-extrabold bg-light-bg dark:bg-dark-bg p-2 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-purple"
+                        />
+                    </div>
+                ) : (
+                    <h1 className="font-display text-4xl md:text-5xl font-extrabold text-light-text dark:text-dark-text mb-4 leading-tight">{post.title}</h1>
+                )}
+                <div className="flex justify-between items-start">
+                    <div className="flex items-center text-light-subtle dark:text-dark-subtle mt-4">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-lg mr-3">
+                          {post.authorUsername.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                          <p className="font-semibold text-light-text dark:text-dark-text">{post.authorUsername}</p>
+                          <p className="text-sm">{postDate}</p>
+                      </div>
+                    </div>
+                    {isAuthor && !isEditing && (
+                        <div className="flex items-center space-x-4 mt-4">
+                            <button onClick={startEditing} className="text-sm font-semibold text-blue-500 hover:underline">Edit</button>
+                            <button onClick={handleDeletePost} className="text-sm font-semibold text-red-500 hover:underline">Delete</button>
+                        </div>
+                    )}
                 </div>
                  <div className="mt-4 flex flex-wrap gap-2">
                     {(post.hashtags || []).map(tag => (
@@ -174,13 +244,26 @@ const PostPage: React.FC = () => {
                 </div>
               </header>
               <div className="prose prose-lg dark:prose-invert max-w-none prose-p:text-light-text dark:prose-p:text-dark-text prose-headings:font-display prose-headings:text-light-text dark:prose-headings:text-dark-text prose-a:text-brand-purple hover:prose-a:opacity-80 dark:prose-a:text-brand-purple dark:hover:prose-a:opacity-80">
-                {post.content.split('\n').map((paragraph, index) => (
-                    <p key={index}>{paragraph}</p>
-                ))}
+                {isEditing ? (
+                    <textarea 
+                        rows={20} 
+                        value={editedContent} 
+                        onChange={(e) => setEditedContent(e.target.value)}
+                        className="w-full text-lg bg-light-bg dark:bg-dark-bg p-2 rounded-lg border border-gray-300 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-purple"
+                    />
+                ) : (
+                    post.content.split('\n').map((paragraph, index) => <p key={index}>{paragraph}</p>)
+                )}
               </div>
               
-              <CommentSection postId={post.id} />
-
+              {isEditing && (
+                <div className="mt-6 flex justify-end space-x-4">
+                    <button onClick={() => setIsEditing(false)} className="py-2 px-6 rounded-lg font-semibold bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600">Cancel</button>
+                    <button onClick={handleUpdatePost} className="py-2 px-6 rounded-lg font-semibold text-white bg-brand-purple hover:opacity-90">Save Changes</button>
+                </div>
+              )}
+              
+              {!isEditing && <CommentSection postId={post.id} />}
             </div>
         </article>
         

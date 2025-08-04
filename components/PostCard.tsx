@@ -6,7 +6,6 @@ import { db } from '../firebase';
 import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 
-// --- NEW: Comment Icon ---
 const CommentIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -73,7 +72,10 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
     setIsSaved(prev => !prev);
   };
   
-  const postDate = post.createdAt?.toDate ? `${formatDistanceToNow(post.createdAt.toDate())} ago` : 'Just now';
+  // --- THIS IS THE UPDATED LINE ---
+  const postDate = post.updatedAt
+    ? `${formatDistanceToNow(post.updatedAt.toDate())} ago (edited)`
+    : post.createdAt?.toDate ? `${formatDistanceToNow(post.createdAt.toDate())} ago` : 'Just now';
 
   return (
     <div className="w-full break-inside-avoid mb-8 animate-fade-in-up">
@@ -106,7 +108,6 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
                 ))}
               </div>
 
-              {/* --- THIS IS THE UPDATED FOOTER --- */}
               <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-between items-center">
                   <div className="flex items-center space-x-2 text-light-subtle dark:text-dark-subtle group-hover:text-brand-purple transition-colors">
                     <CommentIcon />

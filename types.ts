@@ -1,8 +1,10 @@
+import { Timestamp } from "firebase/firestore";
+
 export interface User {
   id: string;
   username: string;
   email: string;
-  password?: string; // This would be a hash in a real app
+  password?: string;
 }
 
 export interface Post {
@@ -11,11 +13,13 @@ export interface Post {
   content: string;
   authorId: string;
   authorUsername: string;
-  createdAt: string;
-  likes: string[]; // Array of user IDs
-  saves: string[]; // Array of user IDs
+  createdAt: Timestamp; // Use the correct Firestore Timestamp type
+  updatedAt?: Timestamp; // Add optional updatedAt
+  likes: string[];
+  saves: string[];
   coverImageUrl: string;
   hashtags: string[];
+  commentCount: number; // Add commentCount
 }
 
 export interface Comment {
@@ -24,7 +28,7 @@ export interface Comment {
     authorId: string;
     authorUsername: string;
     content: string;
-    createdAt: string;
+    createdAt: Timestamp; // Use the correct Firestore Timestamp type
 }
 
 export interface AuthUser extends Omit<User, 'password'> {
