@@ -37,18 +37,19 @@ const NewPostPage: React.FC = () => {
     const widget = window.cloudinary.createUploadWidget(
       {
         cloudName: 'dpbx3ka0x', 
-        uploadPreset: 'lnri23lf', 
-        cropping: true, // Optional: Adds a cropping tool
+        uploadPreset: 'lnri23lf',  
+        cropping: true, // Enable the cropping tool
+        croppingAspectRatio: 16/9, // Set a 16:9 aspect ratio for cover photos
         multiple: false,
       },
       (error, result) => {
         if (!error && result && result.event === "success") {
-          console.log('Image uploaded! URL: ', result.info.secure_url);
-          setCoverImageUrl(result.info.secure_url); // Save the image URL to state
+          console.log('Done! Here is the image info: ', result.info);
+          setCoverImageUrl(result.info.secure_url);
         }
       }
     );
-    widget.open(); // Open the widget
+    widget.open();
   };
 
   const handleGenerateSuggestions = async () => {

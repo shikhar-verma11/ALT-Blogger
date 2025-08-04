@@ -2,19 +2,18 @@ import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import type { Post, Comment } from '../types';
 import { AuthContext } from '../contexts/AuthContext';
-import { db } from '../firebase'; // Import Firestore
-import { 
-    doc, 
-    getDoc, 
-    collection, 
-    addDoc, 
-    query, 
-    orderBy, 
-    getDocs, 
-    serverTimestamp 
+import { db } from '../firebase';
+import {
+    doc,
+    getDoc,
+    collection,
+    addDoc,
+    query,
+    orderBy,
+    getDocs,
+    serverTimestamp
 } from 'firebase/firestore';
 
-// --- UPDATED CommentSection to use Firestore ---
 const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
     const [comments, setComments] = useState<Comment[]>([]);
     const [newComment, setNewComment] = useState('');
@@ -23,7 +22,6 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
     const user = authContext?.user;
 
     const fetchComments = useCallback(async () => {
-        // Comments are stored in a sub-collection inside each post document
         const commentsQuery = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "asc"));
         const querySnapshot = await getDocs(commentsQuery);
         const fetchedComments = querySnapshot.docs.map(doc => ({
@@ -41,7 +39,6 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
         if (!newComment.trim() || !user) return;
         setLoading(true);
         
-        // Add a new comment to the sub-collection
         await addDoc(collection(db, "posts", postId, "comments"), {
             postId,
             authorId: user.id,
@@ -51,7 +48,7 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
         });
         
         setNewComment('');
-        await fetchComments(); // Refresh comments after posting
+        await fetchComments();
         setLoading(false);
     };
 
@@ -101,18 +98,18 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
     )
 }
 
-// --- UPDATED PostPage to use Firestore ---
 const PostPage: React.FC = () => {
-  const { postId } = useParams<{ postId: string }>(); // Renamed to postId for clarity
+  const { postId } = useParams<{ postId: string }>();
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
+  // --- NEW: State to control the image modal ---
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchPost = async () => {
       if (!postId) return;
       setLoading(true);
       
-      // Get a single document reference from Firestore
       const postRef = doc(db, "posts", postId);
       const docSnap = await getDoc(postRef);
 
@@ -142,7 +139,10 @@ const PostPage: React.FC = () => {
     <div className="max-w-4xl mx-auto">
         <article className="bg-light-card dark:bg-dark-card rounded-2xl shadow-xl overflow-hidden">
             {post.coverImageUrl && (
-                <img src={post.coverImageUrl} alt={post.title} className="w-full h-64 md:h-96 object-cover" />
+                // --- UPDATED: Image is now a button to open the modal ---
+                <button onClick={() => setIsModalOpen(true)} className="w-full block">
+                    <img src={post.coverImageUrl} alt={post.title} className="w-full h-64 md:h-96 object-cover" />
+                </button>
             )}
             <div className="p-6 sm:p-10">
               <header className="mb-8 border-b border-gray-200 dark:border-gray-800 pb-8">
@@ -172,6 +172,25 @@ const PostPage: React.FC = () => {
 
             </div>
         </article>
+        
+        {/* --- NEW: Image Modal --- */}
+        {isModalOpen && (
+            <div 
+                className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 animate-fade-in-up"
+                onClick={() => setIsModalOpen(false)} // Close modal on background click
+            >
+                <img 
+                    src={post.coverImageUrl} 
+                    alt={post.title} 
+                    className="max-w-[90vw] max-h-[90vh] object-contain"
+                />
+                <button 
+                    className="absolute top-4 right-4 text-white text-3xl font-bold"
+                >
+                    &times;
+                </button>
+            </div>
+        )}
     </div>
   );
 };
