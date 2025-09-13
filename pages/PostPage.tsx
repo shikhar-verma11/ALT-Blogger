@@ -18,7 +18,14 @@ import {
 } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 
-const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
+// --- NEW: Icon for delete button ---
+const TrashIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+    </svg>
+);
+
+const CommentSection: React.FC<{ postId: string, postAuthorId: string }> = ({ postId, postAuthorId }) => {
     const [comments, setComments] = useState<Comment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [loading, setLoading] = useState(false);
@@ -42,9 +49,7 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
     const handleSubmitComment = async () => {
         if (!newComment.trim() || !user) return;
         setLoading(true);
-        
         const postRef = doc(db, "posts", postId);
-
         await addDoc(collection(postRef, "comments"), {
             postId,
             authorId: user.id,
@@ -52,14 +57,25 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
             content: newComment,
             createdAt: serverTimestamp()
         });
-
-        await updateDoc(postRef, {
-            commentCount: increment(1)
-        });
-        
+        await updateDoc(postRef, { commentCount: increment(1) });
         setNewComment('');
         await fetchComments();
         setLoading(false);
+    };
+
+    const handleDeleteComment = async (commentId: string) => {
+        if (window.confirm("Are you sure you want to delete this comment?")) {
+            try {
+                const commentRef = doc(db, "posts", postId, "comments", commentId);
+                await deleteDoc(commentRef);
+                const postRef = doc(db, "posts", postId);
+                await updateDoc(postRef, { commentCount: increment(-1) });
+                await fetchComments();
+            } catch (error) {
+                console.error("Error deleting comment: ", error);
+                alert("Failed to delete comment.");
+            }
+        }
     };
 
     return (
@@ -87,22 +103,38 @@ const CommentSection: React.FC<{ postId: string }> = ({ postId }) => {
             )}
 
             <div className="space-y-6">
-                {comments.map(comment => (
-                    <div key={comment.id} className="flex items-start space-x-4 animate-fade-in-up">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                            {comment.authorUsername.charAt(0).toUpperCase()}
-                        </div>
-                        <div className="flex-1">
-                            <div className="bg-light-bg dark:bg-dark-bg p-4 rounded-lg rounded-tl-none">
-                                <p className="font-semibold text-light-text dark:text-dark-text">{comment.authorUsername}</p>
-                                <p className="text-sm text-light-subtle dark:text-dark-subtle mb-2">
-                                    {comment.createdAt ? `${formatDistanceToNow(new Date((comment.createdAt as any).toDate()))} ago` : 'Just now'}
-                                </p>
-                                <p className="text-light-text dark:text-dark-text">{comment.content}</p>
+                {comments.map(comment => {
+                    const isCommentAuthor = user && user.id === comment.authorId;
+                    const isPostAuthor = user && user.id === postAuthorId;
+                    
+                    return (
+                        <div key={comment.id} className="group flex items-start space-x-4 animate-fade-in-up">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                                {comment.authorUsername.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex-1">
+                                <div className="bg-light-bg dark:bg-dark-bg p-4 rounded-lg rounded-tl-none relative">
+                                    <div className="flex justify-between items-center">
+                                        <p className="font-semibold text-light-text dark:text-dark-text">{comment.authorUsername}</p>
+                                        {(isCommentAuthor || isPostAuthor) && (
+                                            <button 
+                                                onClick={() => handleDeleteComment(comment.id)} 
+                                                className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                title="Delete comment"
+                                            >
+                                                <TrashIcon />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <p className="text-sm text-light-subtle dark:text-dark-subtle mb-2">
+                                        {comment.createdAt ? `${formatDistanceToNow(new Date((comment.createdAt as any).toDate()))} ago` : 'Just now'}
+                                    </p>
+                                    <p className="text-light-text dark:text-dark-text">{comment.content}</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                ))}
+                    )
+                })}
             </div>
         </div>
     )
@@ -118,7 +150,6 @@ const PostPage: React.FC = () => {
   const [post, setPost] = useState<Post | null>(null);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
   const [editedContent, setEditedContent] = useState('');
@@ -126,15 +157,11 @@ const PostPage: React.FC = () => {
   const fetchPost = useCallback(async () => {
     if (!postId) return;
     setLoading(true);
-    
     const postRef = doc(db, "posts", postId);
     const docSnap = await getDoc(postRef);
-
     if (docSnap.exists()) {
-      const data = docSnap.data();
-      setPost({ id: docSnap.id, ...data } as Post);
+      setPost({ id: docSnap.id, ...docSnap.data() } as Post);
     } else {
-      console.log("No such document!");
       setPost(null);
     }
     setLoading(false);
@@ -167,7 +194,7 @@ const PostPage: React.FC = () => {
             content: editedContent,
             updatedAt: serverTimestamp()
         });
-        await fetchPost(); // Refetch post data to show updated content
+        await fetchPost();
         setIsEditing(false);
     } catch (error) {
         console.error("Error updating document: ", error);
@@ -181,7 +208,7 @@ const PostPage: React.FC = () => {
     setEditedTitle(post.title);
     setEditedContent(post.content);
     setIsEditing(true);
-  }
+  };
 
   if (loading) {
     return <div className="text-center py-10">Loading post...</div>;
@@ -191,10 +218,8 @@ const PostPage: React.FC = () => {
     return <div className="text-center py-10 text-red-500">Post not found.</div>;
   }
   
-  const postDate = post.updatedAt
-    ? `${formatDistanceToNow(post.updatedAt.toDate())} ago (edited)`
-    : post.createdAt?.toDate ? `${formatDistanceToNow(post.createdAt.toDate())} ago` : 'Just now';
-
+  const originalPostDate = post.createdAt?.toDate ? `${formatDistanceToNow(post.createdAt.toDate())} ago` : 'Just now';
+  const editedDate = post.updatedAt?.toDate ? `(edited ${formatDistanceToNow(post.updatedAt.toDate())} ago)` : null;
   const isAuthor = user && user.id === post.authorId;
 
   return (
@@ -227,7 +252,9 @@ const PostPage: React.FC = () => {
                       </div>
                       <div>
                           <p className="font-semibold text-light-text dark:text-dark-text">{post.authorUsername}</p>
-                          <p className="text-sm">{postDate}</p>
+                          <p className="text-sm">
+                            {originalPostDate} {editedDate && <span className="italic text-gray-500">{editedDate}</span>}
+                          </p>
                       </div>
                     </div>
                     {isAuthor && !isEditing && (
@@ -263,7 +290,7 @@ const PostPage: React.FC = () => {
                 </div>
               )}
               
-              {!isEditing && <CommentSection postId={post.id} />}
+              {!isEditing && <CommentSection postId={post.id} postAuthorId={post.authorId} />}
             </div>
         </article>
         
