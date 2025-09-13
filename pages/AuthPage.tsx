@@ -8,6 +8,16 @@ const ErrorIcon: React.FC = () => (
     </svg>
 );
 
+// --- NEW: Google Icon for the button ---
+const GoogleIcon: React.FC = () => (
+    <svg className="w-5 h-5 mr-3" viewBox="0 0 48 48">
+        <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path>
+        <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C16.318 4 9.656 8.337 6.306 14.691z"></path>
+        <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"></path>
+        <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.012 36.494 44 30.861 44 24c0-1.341-.138-2.65-.389-3.917z"></path>
+    </svg>
+);
+
 
 const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -20,9 +30,8 @@ const AuthPage: React.FC = () => {
   const navigate = useNavigate();
 
   if (!authContext) return null;
-  const { login, signup } = authContext;
+  const { login, signup, signInWithGoogle } = authContext; // Get the new function
 
-  // --- THIS IS THE UPDATED FUNCTION ---
   const handleSubmit = async () => {
     setError('');
     setLoading(true);
@@ -39,18 +48,26 @@ const AuthPage: React.FC = () => {
       } else {
         await signup(username, email, password);
       }
-      // If the above functions complete without error, the user is logged in.
-      // The onAuthStateChanged listener in your context will update the state,
-      // and the app will re-render. We can navigate them away.
       navigate('/profile');
 
     } catch (err: any) {
-      // Firebase provides user-friendly error messages
-      // e.g., "Firebase: Error (auth/wrong-password)."
-      // We can display this directly.
       setError(err.message || 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // --- NEW: Handler for Google Sign-In button ---
+  const handleGoogleSignIn = async () => {
+    setError('');
+    setLoading(true);
+    try {
+        await signInWithGoogle();
+        navigate('/profile');
+    } catch (err: any) {
+        setError(err.message || 'An error occurred with Google Sign-In.');
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -100,6 +117,19 @@ const AuthPage: React.FC = () => {
             {loading ? 'Processing...' : (isLogin ? 'Login' : 'Sign Up')}
           </button>
         </div>
+
+        {/* --- NEW: Separator and Google Sign-In Button --- */}
+        <div className="my-6 flex items-center">
+            <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
+            <span className="flex-shrink mx-4 text-light-subtle dark:text-dark-subtle text-sm">OR</span>
+            <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
+        </div>
+
+        <button onClick={handleGoogleSignIn} disabled={loading} className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm text-lg font-semibold text-light-text dark:text-dark-text bg-light-bg dark:bg-dark-bg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-60">
+            <GoogleIcon />
+            {isLogin ? 'Sign in with Google' : 'Sign up with Google'}
+        </button>
+
       </div>
     </div>
   );

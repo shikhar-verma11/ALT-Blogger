@@ -6,10 +6,11 @@ import PostPage from './pages/PostPage';
 import AuthPage from './pages/AuthPage';
 import NewPostPage from './pages/NewPostPage';
 import ProfilePage from './pages/ProfilePage';
+import VerifyEmailPage from './pages/VerifyEmailPage'; // 1. Import the new page
 import { AuthContext } from './contexts/AuthContext';
 
 // --- This component is now more robust ---
-// It checks the loading state before deciding to redirect.
+// It checks the loading state and email verification status before deciding to redirect.
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useContext(AuthContext)!;
 
@@ -17,11 +18,17 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <div>Loading session...</div>; // Show loading screen while checking
   }
 
+  // 2. Add a check for email verification.
+  // Users who sign in with Google are automatically verified.
+  if (user && !user.emailVerified) {
+    return <Navigate to="/verify-email" replace />;
+  }
+
   if (!user) {
     return <Navigate to="/auth" replace />; // Redirect if not logged in
   }
 
-  return <>{children}</>; // Show the protected page if logged in
+  return <>{children}</>; // Show the protected page if logged in and verified
 };
 
 const App: React.FC = () => {
@@ -40,11 +47,13 @@ const App: React.FC = () => {
       <main className="flex-grow container mx-auto px-4 py-8 animate-fade-in-up">
         <Routes>
           <Route path="/" element={<HomePage />} />
-          {/* Note the change on the next line for the PostPage route */}
           <Route path="/post/:postId" element={<PostPage />} />
           
           {/* If the user is logged in, redirect from /auth to their profile */}
           <Route path="/auth" element={user ? <Navigate to="/profile" replace /> : <AuthPage />} />
+          
+          {/* 3. Add the new route for the verification page */}
+          <Route path="/verify-email" element={user && !user.emailVerified ? <VerifyEmailPage /> : <Navigate to="/" />} />
           
           {/* These routes are now correctly protected */}
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />

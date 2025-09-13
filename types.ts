@@ -32,5 +32,6 @@ export interface Comment {
 }
 
 export interface AuthUser extends Omit<User, 'password'> {
+  emailVerified: boolean; 
   // Can be extended with more fields if needed, e.g., token
 }
