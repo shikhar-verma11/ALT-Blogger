@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  /* Brand Colors */
+  --color-brand-purple: #9B5DE5;
+  --color-brand-yellow: #FEE440;
+
+  /* Light Theme Colors */
+  --color-light-bg: #FAF9F6;
+  --color-light-card: #FFFFFF;
+  --color-light-text: #121212;
+  --color-light-subtle: #666666;
+
+  /* Dark Theme Colors */
+  --color-dark-bg: #121212;
+  --color-dark-card: #1E1E1E;
+  --color-dark-text: #E0E0E0;
+  --color-dark-subtle: #999999;
+
+  /* Fonts */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Lexend", ui-sans-serif, system-ui, sans-serif;
+
+  /* Animations */
+  @keyframes fade-in-up {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  --animate-fade-in-up: fade-in-up 0.5s ease-out forwards;
+}
