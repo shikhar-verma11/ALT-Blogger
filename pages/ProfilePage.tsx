@@ -40,7 +40,6 @@ const ProfilePage: React.FC = () => {
 
       try {
         const querySnapshot = await getDocs(postsQuery);
-        // --- THIS IS THE CORRECTED PART ---
         const fetchedPosts = querySnapshot.docs.map(doc => {
           // Explicitly cast doc.data() to the Post type
           const data = doc.data() as Omit<Post, 'id'>;

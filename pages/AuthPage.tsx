@@ -1,6 +1,8 @@
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../firebase';
 
 const ErrorIcon: React.FC = () => (
     <svg className="fill-current h-6 w-6 text-red-500 mr-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
@@ -57,7 +59,24 @@ const AuthPage: React.FC = () => {
     }
   };
 
-  // --- NEW: Handler for Google Sign-In button ---
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError("Please enter your email address to reset your password.");
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      alert("Password reset email sent! Please check your inbox.");
+      setError(''); // Clear any existing errors
+    } catch (err: any) {
+      setError(err.message || "Failed to send reset email.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  //Handler for Google Sign-In button ---
   const handleGoogleSignIn = async () => {
     setError('');
     setLoading(true);
@@ -112,6 +131,18 @@ const AuthPage: React.FC = () => {
            <div>
             <label htmlFor="password" className="block text-sm font-medium text-light-text dark:text-dark-text">Password</label>
             <input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} className="mt-1 block w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-purple focus:border-brand-purple" />
+                        {isLogin && (
+                <div className="flex justify-end mt-2">
+                  <button 
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-xs font-medium text-brand-purple hover:text-brand-yellow transition-colors"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+              )}
+
           </div>
           <button onClick={handleSubmit} disabled={loading} className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-lg font-semibold text-white bg-gradient-to-r from-brand-purple to-brand-yellow hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-purple disabled:opacity-60 transition-all transform hover:scale-105">
             {loading ? 'Processing...' : (isLogin ? 'Login' : 'Sign Up')}
