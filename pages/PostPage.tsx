@@ -220,7 +220,7 @@ const handleReplySubmit = async () => {
     );
 };
 
-const CommentSection: React.FC<{ postId: string, postAuthorId: string }> = ({ postId, postAuthorId }) => {
+const CommentSection: React.FC<{ postId: string, postAuthorId: string, setPost: React.Dispatch<React.SetStateAction<Post | null>> }> = ({ postId, postAuthorId, setPost }) => {
     const [comments, setComments] = useState<Comment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [loading, setLoading] = useState(false);
@@ -291,19 +291,26 @@ const handleSubmitDiscussion = async (
     }
 };
 
-    const handleDeleteComment = async (commentId: string) => {
-        if (window.confirm("Are you sure you want to delete this?")) {
-            try {
-                const commentRef = doc(db, "posts", postId, "comments", commentId);
-                await deleteDoc(commentRef);
-                const postRef = doc(db, "posts", postId);
-                await updateDoc(postRef, { commentCount: increment(-1) });
-                await fetchComments();
-            } catch (error) {
-                console.error("Error deleting: ", error);
-            }
+   const handleDeleteComment = async (commentId: string) => {
+    if (window.confirm("Are you sure you want to delete this?")) {
+        try {
+            const commentRef = doc(db, "posts", postId, "comments", commentId);
+            await deleteDoc(commentRef);
+
+            const postRef = doc(db, "posts", postId);
+            await updateDoc(postRef, { commentCount: increment(-1) });
+
+            setPost(prev => {
+                if (!prev) return null;
+                return { ...prev, commentCount: Math.max(0, prev.commentCount - 1) };
+            });
+
+            await fetchComments();
+        } catch (error) {
+            console.error("Error deleting: ", error);
         }
-    };
+    }
+};
 
     // Only show top-level discussions in the main map (ones without a parentId)
     const topLevelDiscussions = comments.filter(c => !c.parentId);
@@ -504,7 +511,7 @@ const PostPage: React.FC = () => {
                 </div>
               )}
               
-              {!isEditing && <CommentSection postId={post.id} postAuthorId={post.authorId} />}
+              {!isEditing && <CommentSection postId={post.id} postAuthorId={post.authorId} setPost={setPost} />}
             </div>
         </article>
         
