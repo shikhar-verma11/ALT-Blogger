@@ -1,53 +1,90 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
-import type { Post } from '../types';
+import type { Post, User } from '../types'; // Ensure User type is imported
 import PostCard from '../components/PostCard';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { useParams } from 'react-router-dom';
 
 type Tab = 'myPosts' | 'likedPosts' | 'savedPosts';
 
 const ProfilePage: React.FC = () => {
+  const { username: urlUsername } = useParams<{ username: string }>();
+  const authContext = useContext(AuthContext);
+  const currentUser = authContext?.user;
+
   const [activeTab, setActiveTab] = useState<Tab>('myPosts');
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const authContext = useContext(AuthContext);
-  
-  const user = authContext?.user;
+  const [profileUser, setProfileUser] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // This useEffect hook now runs whenever the activeTab or user changes.
+  // 1. Determine if this is the user's own profile
+  const isOwnProfile = !urlUsername || urlUsername === currentUser?.username;
+
+  // 2. Fetch User Data based on the URL username
+  useEffect(() => {
+    const fetchProfileUser = async () => {
+      if (isOwnProfile) {
+        setProfileUser(currentUser);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("username", "==", urlUsername), limit(1));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+          const userData = querySnapshot.docs[0].data();
+          setProfileUser({ id: querySnapshot.docs[0].id, ...userData });
+          setError(null);
+        } else {
+          setError("User not found");
+        }
+      } catch (err) {
+        console.error("Error fetching user:", err);
+        setError("Failed to load user");
+      }
+      setLoading(false);
+    };
+
+    fetchProfileUser();
+  }, [urlUsername, currentUser, isOwnProfile]);
+
+  // 3. Fetch Posts for the profile being viewed
   useEffect(() => {
     const fetchPosts = async () => {
-      if (!user) return;
+      if (!profileUser) return;
       setLoading(true);
 
       let postsQuery;
       const postsCollection = collection(db, "posts");
 
+      // Logic: If viewing someone else, only show 'myPosts' (their posts)
+      // Usually Liked and Saved posts are private.
       switch (activeTab) {
         case 'myPosts':
-          postsQuery = query(postsCollection, where("authorId", "==", user.id), orderBy("createdAt", "desc"));
+          postsQuery = query(postsCollection, where("authorId", "==", profileUser.id), orderBy("createdAt", "desc"));
           break;
         case 'likedPosts':
-          postsQuery = query(postsCollection, where("likes", "array-contains", user.id));
+          postsQuery = query(postsCollection, where("likes", "array-contains", profileUser.id));
           break;
         case 'savedPosts':
-          postsQuery = query(postsCollection, where("saves", "array-contains", user.id));
+          postsQuery = query(postsCollection, where("saves", "array-contains", profileUser.id));
           break;
         default:
-          postsQuery = query(postsCollection, where("authorId", "==", user.id), orderBy("createdAt", "desc"));
+          postsQuery = query(postsCollection, where("authorId", "==", profileUser.id), orderBy("createdAt", "desc"));
       }
 
       try {
         const querySnapshot = await getDocs(postsQuery);
-        const fetchedPosts = querySnapshot.docs.map(doc => {
-          // Explicitly cast doc.data() to the Post type
-          const data = doc.data() as Omit<Post, 'id'>;
-          return {
-            id: doc.id,
-            ...data
-          };
-        });
+        const fetchedPosts = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Post));
         setPosts(fetchedPosts);
       } catch (error) {
         console.error("Error fetching posts:", error);
@@ -56,57 +93,57 @@ const ProfilePage: React.FC = () => {
       }
     };
 
-    fetchPosts();
-  }, [user, activeTab]); // Re-fetches when the user or active tab changes
+    if (profileUser) fetchPosts();
+  }, [profileUser, activeTab]);
 
-  if (!user) {
-    return <div className="text-center py-10">You need to be logged in to view this page.</div>;
-  }
+  if (loading && !profileUser) return <div className="text-center py-20">Loading Profile...</div>;
+  if (error) return <div className="text-center py-20 text-red-500">{error}</div>;
+  if (!profileUser && !currentUser) return <div className="text-center py-20">Please log in.</div>;
 
-  const tabClasses = (tabName: Tab) => `px-4 py-2 text-sm md:text-base font-semibold rounded-full transition-all duration-300 ${
+  const tabClasses = (tabName: Tab) => `px-6 py-2 text-sm font-semibold rounded-full transition-all ${
     activeTab === tabName 
-      ? 'bg-brand-purple text-white shadow-md' 
-      : 'bg-transparent text-light-subtle dark:text-dark-subtle hover:bg-gray-200 dark:hover:bg-gray-700'
+      ? 'bg-brand-purple text-white shadow-lg' 
+      : 'text-light-subtle dark:text-dark-subtle hover:bg-gray-200 dark:hover:bg-gray-700'
   }`;
 
-  const renderContent = () => {
-    if (loading) {
-      return <div className="text-center py-10">Loading...</div>;
-    }
-    if (posts.length === 0) {
-        let message = "";
-        if (activeTab === "myPosts") message = "You haven't created any posts yet.";
-        if (activeTab === "likedPosts") message = "You haven't liked any posts yet.";
-        if (activeTab === "savedPosts") message = "You haven't saved any posts yet.";
-      return <div className="text-center py-20 text-light-subtle dark:text-dark-subtle bg-light-card dark:bg-dark-card rounded-xl">{message}</div>;
-    }
-    return (
-      <div className="columns-1 md:columns-2 gap-8 mt-6">
-        {posts.map(post => (
-          // The onInteraction prop is removed for a simpler data flow
-          <PostCard key={`${activeTab}-${post.id}`} post={post} />
-        ))}
-      </div>
-    );
-  };
-  
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="bg-light-card dark:bg-dark-card rounded-2xl shadow-xl p-8 mb-8 flex flex-col items-center">
-        <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-4xl mb-4 ring-4 ring-light-card dark:ring-dark-card">
-          {user.username.charAt(0).toUpperCase()}
+      {/* Profile Header */}
+      <div className="bg-light-card dark:bg-dark-card rounded-2xl shadow-xl p-8 mb-8 flex flex-col items-center border border-gray-100 dark:border-gray-800">
+        <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-4xl mb-4 ring-4 ring-white dark:ring-gray-900 shadow-xl">
+          {profileUser?.username?.charAt(0).toUpperCase()}
         </div>
-        <h1 className="font-display text-4xl font-bold text-light-text dark:text-dark-text">@{user.username}</h1>
-        <p className="text-light-subtle dark:text-dark-subtle mt-1">{user.email}</p>
+        <h1 className="font-display text-3xl font-bold text-light-text dark:text-dark-text">@{profileUser?.username}</h1>
+        {isOwnProfile && <p className="text-light-subtle dark:text-dark-subtle text-sm mt-1">{profileUser?.email}</p>}
       </div>
 
-      <div className="flex justify-center p-2 bg-gray-200/70 dark:bg-gray-800/70 rounded-full mb-8">
-        <button onClick={() => setActiveTab('myPosts')} className={tabClasses('myPosts')}>My Posts</button>
-        <button onClick={() => setActiveTab('likedPosts')} className={tabClasses('likedPosts')}>Liked Posts</button>
-        <button onClick={() => setActiveTab('savedPosts')} className={tabClasses('savedPosts')}>Saved Posts</button>
+      {/* Tabs - Only show Liked/Saved if it's the user's own profile */}
+      <div className="flex justify-center p-1.5 bg-gray-200/50 dark:bg-gray-800/50 rounded-full mb-8 max-w-md mx-auto">
+        <button onClick={() => setActiveTab('myPosts')} className={tabClasses('myPosts')}>
+          {isOwnProfile ? 'My Posts' : 'Posts'}
+        </button>
+        {isOwnProfile && (
+          <>
+            <button onClick={() => setActiveTab('likedPosts')} className={tabClasses('likedPosts')}>Liked</button>
+            <button onClick={() => setActiveTab('savedPosts')} className={tabClasses('savedPosts')}>Saved</button>
+          </>
+        )}
       </div>
       
-      {renderContent()}
+      {/* Content Grid */}
+      {loading ? (
+        <div className="text-center py-10">Updating list...</div>
+      ) : posts.length === 0 ? (
+        <div className="text-center py-20 bg-light-card dark:bg-dark-card rounded-xl border border-dashed border-gray-300 dark:border-gray-700">
+           {isOwnProfile ? "You haven't added anything here yet." : "This user hasn't posted anything yet."}
+        </div>
+      ) : (
+        <div className="columns-1 md:columns-2 gap-8">
+          {posts.map(post => (
+            <PostCard key={post.id} post={post} />
+          ))}
+        </div>
+      )}
     </div>
   );
 };

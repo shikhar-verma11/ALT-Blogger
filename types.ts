@@ -12,14 +12,15 @@ export interface Post {
   title: string;
   content: string;
   authorId: string;
-  authorUsername: string;
-  createdAt: Timestamp; // Use the correct Firestore Timestamp type
-  updatedAt?: Timestamp; // Add optional updatedAt
+  authorUsername: string; // The unique handle (shikharverma113)
+  authorName: string;     // The pretty display name (Shikhar Verma) - ADD THIS
+  createdAt: Timestamp;
+  updatedAt?: Timestamp;
   likes: string[];
   saves: string[];
   coverImageUrl: string;
   hashtags: string[];
-  commentCount: number; // Add commentCount
+  commentCount: number;
 }
 
 export interface Comment {
@@ -27,8 +28,12 @@ export interface Comment {
     postId: string;
     authorId: string;
     authorUsername: string;
+    authorName?: string; 
     content: string;
-    createdAt: Timestamp; // Use the correct Firestore Timestamp type
+    createdAt: Timestamp;
+    parentId?: string | null; 
+    replyToUsername?: string | null;
+    replyToName?: string | null;  
 }
 
 export interface AuthUser extends Omit<User, 'password'> {

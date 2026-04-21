@@ -58,6 +58,11 @@ const App: React.FC = () => {
           {/* These routes are now correctly protected */}
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/new" element={<ProtectedRoute><NewPostPage /></ProtectedRoute>} />
+          {/* 1. Static route for "My Profile" */}
+          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+
+          {/* 2. Dynamic route for viewing others */}
+          <Route path="/profile/:username" element={<ProfilePage />} />
         </Routes>
       </main>
       <footer className="bg-light-card/50 dark:bg-dark-card/50 border-t border-gray-200 dark:border-gray-800 py-6 text-center text-light-subtle dark:text-dark-subtle">

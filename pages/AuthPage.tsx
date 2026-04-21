@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
+import { db } from '../firebase';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { query, where, getDocs, collection, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 
 const ErrorIcon: React.FC = () => (
     <svg className="fill-current h-6 w-6 text-red-500 mr-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
@@ -35,29 +38,45 @@ const AuthPage: React.FC = () => {
   const { login, signup, signInWithGoogle } = authContext; // Get the new function
 
   const handleSubmit = async () => {
-    setError('');
-    setLoading(true);
+  setError('');
+  setLoading(true);
 
-    if(!email || !password || (!isLogin && !username)){
-      setError("All fields are required.");
-      setLoading(false);
-      return;
+  if(!email || !password || (!isLogin && !username)){
+    setError("All fields are required.");
+    setLoading(false);
+    return;
+  }
+
+  try {
+    if (isLogin) {
+      await login(email, password);
+    } else {
+      // 1. Create the user in Firebase Authentication
+      // Make sure your 'signup' function in AuthContext returns the userCredential!
+      const userCredential = await signup(username, email, password);
+      const newUser = userCredential.user;
+
+      // 2. PERMANENT FIX: Create the user document in the 'users' collection
+      // This ensures they have a profile page to link to.
+      await setDoc(doc(db, "users", newUser.uid), {
+        id: newUser.uid,
+        username: username.toLowerCase().trim(), // Normalizing to lowercase makes searching easier
+        email: email.toLowerCase().trim(),
+        createdAt: serverTimestamp()
+      });
     }
+    
+    // Navigate to the dynamic profile now that it actually exists!
+    // If you want them to see their own profile:
+    navigate(`/profile/${username.toLowerCase().trim()}`);
 
-    try {
-      if (isLogin) {
-        await login(email, password);
-      } else {
-        await signup(username, email, password);
-      }
-      navigate('/profile');
-
-    } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (err: any) {
+    console.error("Auth/Firestore Error:", err);
+    setError(err.message || 'An unexpected error occurred. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleForgotPassword = async () => {
     if (!email) {
@@ -81,12 +100,22 @@ const AuthPage: React.FC = () => {
     setError('');
     setLoading(true);
     try {
-        await signInWithGoogle();
-        navigate('/profile');
+      const result = await signInWithGoogle();
+      const user = result.user;
+
+      // This ensures Google users get a profile document too!
+      await setDoc(doc(db, "users", user.uid), {
+        id: user.uid,
+        username: user.displayName || user.email?.split('@')[0],
+        email: user.email,
+        createdAt: serverTimestamp()
+      }, { merge: true });
+
+      navigate('/profile');
     } catch (err: any) {
-        setError(err.message || 'An error occurred with Google Sign-In.');
+      setError(err.message || 'An error occurred with Google Sign-In.');
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 

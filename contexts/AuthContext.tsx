@@ -9,7 +9,7 @@ import {
     User as FirebaseUser,
     GoogleAuthProvider,
     signInWithPopup,
-    sendEmailVerification // 1. Import the new function
+    sendEmailVerification 
 } from "firebase/auth";
 import type { AuthUser } from '../types';
 import { app } from '../firebase';
@@ -18,9 +18,9 @@ interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
   login: (email: string, password_in: string) => Promise<void>;
-  signup: (username: string, email: string, password_in: string) => Promise<void>;
+  signup: (username: string, email: string, password_in: string) => Promise<any>;
   logout: () => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: () => Promise<any>;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -66,9 +66,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await updateProfile(firebaseUser, {
         displayName: username
       });
-      // We no longer need to reload or set the user manually here.
-      // onAuthStateChanged will automatically pick up the new user.
     }
+    return userCredential;
   };
 
   const logout = async () => {
@@ -76,9 +75,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
   
   const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-  };
+  const provider = new GoogleAuthProvider();
+  return await signInWithPopup(auth, provider);
+};
 
   return (
     <AuthContext.Provider value={{ user, loading, login, signup, logout, signInWithGoogle }}>

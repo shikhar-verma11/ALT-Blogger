@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import { generateSuggestions } from '../services/geminiService';
 import { db } from "../firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, getDoc } from "firebase/firestore";
 
 // You may need to declare the cloudinary global object for TypeScript
 declare global {
@@ -41,7 +41,7 @@ const NewPostPage: React.FC = () => {
         croppingAspectRatio: 16/9,
         multiple: false,
       },
-      (error, result) => {
+      (error: any, result: any) => {
         if (!error && result && result.event === "success") {
           console.log('Done! Here is the image info: ', result.info);
           setCoverImageUrl(result.info.secure_url);
@@ -69,32 +69,49 @@ const NewPostPage: React.FC = () => {
     setHashtags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
   };
 
-  const handleSubmit = async () => {
+const handleSubmit = async () => {
     if (!title || !content || !user) {
-      alert("Title, content, and user are required.");
-      return;
+        alert("Title, content, and user are required.");
+        return;
     }
     setLoading(true);
+    
     try {
-      const docRef = await addDoc(collection(db, "posts"), {
-        title: title,
-        content: content,
-        coverImageUrl: coverImageUrl,
-        hashtags: hashtags,
-        authorId: user.id,
-        authorUsername: user.username,
-        createdAt: serverTimestamp(),
-        commentCount: 0 // Initialize comment count
-      });
-      console.log("Post successfully saved to Firestore with ID: ", docRef.id);
-      navigate('/');
+        // 1. Fetch the correct unique handle from your database
+        const userDocRef = doc(db, "users", user.id);
+        const userDocSnap = await getDoc(userDocRef);
+        
+        let finalUsername = "";
+        
+        if (userDocSnap.exists() && userDocSnap.data().username) {
+            // Use the migrated username (e.g., shikharverma_n5eg)
+            finalUsername = userDocSnap.data().username;
+        } else {
+            // Fallback: Manually clean the current username if the doc isn't found
+            finalUsername = user.username.toLowerCase().trim().replace(/\s+/g, '') + "_" + user.id.substring(0, 4);
+        }
+
+        // 2. Save the post using the clean username
+        const docRef = await addDoc(collection(db, "posts"), {
+            title: title,
+            content: content,
+            coverImageUrl: coverImageUrl,
+            hashtags: hashtags,
+            authorId: user.id,
+            authorUsername: finalUsername, // ✅ This fixes the link for this post
+            createdAt: serverTimestamp(),
+            commentCount: 0 
+        });
+        
+        console.log("Post successfully saved with clean handle: ", finalUsername);
+        navigate('/');
     } catch (e) {
-      console.error("Error adding document: ", e);
-      alert("There was an error publishing your post. Please try again.");
+        console.error("Error adding document: ", e);
+        alert("There was an error publishing your post.");
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+};
 
   return (
     <div className="max-w-3xl mx-auto bg-light-card dark:bg-dark-card rounded-2xl shadow-xl p-8">

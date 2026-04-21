@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import type { Post, Comment } from '../types';
 import { AuthContext } from '../contexts/AuthContext';
 import { db } from '../firebase';
@@ -25,6 +25,201 @@ const TrashIcon: React.FC = () => (
     </svg>
 );
 
+const DiscussionItem: React.FC<{
+    comment: Comment;
+    allComments: Comment[];
+    postId: string;
+    postAuthorId: string;
+    user: any;
+    onDelete: (id: string) => void;
+    onReply: (parentId: string, replyToUsername: string, replyToName: string, content: string) => Promise<void>;
+}> = ({ comment, allComments, postId, postAuthorId, user, onDelete, onReply }) => {
+    const [isReplying, setIsReplying] = useState(false);
+    const [replyText, setReplyText] = useState('');
+    const [visibleReplies, setVisibleReplies] = useState(0);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const navigate = useNavigate();
+
+    // FLAT LOGIC: Find all replies where parentId is THIS comment's ID
+    const replies = allComments.filter(c => c.parentId === comment.id);
+    const hasMore = visibleReplies < replies.length;
+    const remaining = replies.length - visibleReplies;
+
+const handleReplySubmit = async () => {
+    if (!replyText.trim()) return;
+    setIsSubmitting(true);
+    
+
+    const targetHandle = comment.authorUsername; 
+    
+    const targetDisplayName = comment.authorName || comment.authorUsername;
+
+    // Pass both to the onReply function
+    await onReply(comment.id, targetHandle, targetDisplayName, replyText);
+    
+    setReplyText('');
+    setIsReplying(false);
+    setIsSubmitting(false);
+    
+    if (visibleReplies === 0) setVisibleReplies(3);
+    else setVisibleReplies(prev => prev + 1);
+};
+
+    // Keyboard shortcut logic
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleReplySubmit();
+        }
+    };
+
+    const isAuthor = user?.id === comment.authorId || user?.id === postAuthorId;
+
+    return (
+        <div className="flex flex-col space-y-3">
+            {/* Main Discussion Bubble */}
+            <div className="group flex items-start space-x-3">
+                <Link 
+                    to={`/profile/${comment.authorUsername}`}
+                    className="w-9 h-9 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-sm flex-shrink-0 hover:opacity-90 transition-all cursor-pointer"
+                >
+                    {comment.authorUsername.charAt(0).toUpperCase()}
+                </Link>
+                <div className="flex-1">
+                    <div className="bg-light-bg dark:bg-dark-bg p-3 rounded-2xl rounded-tl-none border border-gray-100 dark:border-gray-800">
+                        <div className="flex justify-between items-center mb-1">
+                            <Link 
+                                to={`/profile/${comment.authorUsername}`}
+                                className="font-bold text-xs hover:underline text-light-text dark:text-dark-text"
+                            >
+                                {comment.authorName || comment.authorUsername}
+                            </Link>
+                            {isAuthor && (
+                                <button onClick={() => onDelete(comment.id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <TrashIcon />
+                                </button>
+                            )}
+                        </div>
+                        <p className="text-sm">
+                            {comment.replyToUsername && (
+                                <button 
+                                    onClick={() => navigate(`/profile/${comment.replyToUsername}`)}
+                                    className="text-brand-purple font-bold mr-1 hover:underline"
+                                >
+                                    @{comment.replyToName || comment.replyToUsername}
+                                </button>
+                            )}
+                            {comment.content}
+                        </p>
+                    </div>
+
+                    <div className="flex items-center space-x-4 mt-1.5 ml-1">
+                        <span className="text-[10px] text-light-subtle dark:text-dark-subtle">
+                            {comment.createdAt ? formatDistanceToNow(new Date((comment.createdAt as any).toDate())) : 'Just now'}
+                        </span>
+                        {user && (
+                            <button onClick={() => setIsReplying(!isReplying)} className="text-[11px] font-bold text-light-subtle hover:text-brand-purple transition-colors">
+                                Reply
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Reply Area */}
+                    {isReplying && (
+                        <div className="mt-3 flex flex-col space-y-2">
+                            <textarea 
+                                autoFocus
+                                value={replyText}
+                                onKeyDown={handleKeyDown}
+                                onChange={e => setReplyText(e.target.value)}
+                                placeholder={`Reply to ${comment.authorName || comment.authorUsername}... (Press Enter to post)`}
+                                className="w-full bg-transparent border-b border-gray-300 dark:border-gray-700 py-1 text-sm focus:outline-none focus:border-brand-purple resize-none"
+                                rows={1}
+                            />
+                            <p className="text-[9px] text-light-subtle">Shift + Enter for new line</p>
+                        </div>
+                    )}
+
+                    {/* Pagination Button */}
+                    {replies.length > 0 && (
+                        <div className="mt-2">
+                            {visibleReplies === 0 ? (
+                                <button onClick={() => setVisibleReplies(3)} className="flex items-center text-[11px] font-bold text-light-subtle hover:text-light-text">
+                                    <span className="w-8 h-[1px] bg-gray-300 dark:bg-gray-700 mr-2"></span>
+                                    View {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
+                                </button>
+                            ) : hasMore && (
+                                <button onClick={() => setVisibleReplies(prev => prev + 3)} className="flex items-center text-[11px] font-bold text-light-subtle hover:text-light-text mt-2 ml-4">
+                                    <span className="w-6 h-[1px] bg-gray-300 dark:bg-gray-700 mr-2"></span>
+                                    View {remaining} more
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* FLAT REPLIES LIST (No more nesting) */}
+                    {visibleReplies > 0 && (
+                        <div className="mt-4 space-y-5 border-l-2 border-gray-100 dark:border-gray-800 ml-1.5 pl-4">
+                            {replies.slice(0, visibleReplies).map(reply => (
+                                <div key={reply.id} className="group flex items-start space-x-3">
+                                    <Link 
+                                        to={`/profile/${reply.authorName || reply.authorUsername}`}
+                                        className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-bold flex-shrink-0 hover:opacity-80 transition-opacity cursor-pointer"
+                                    >
+                                        {reply.authorUsername.charAt(0).toUpperCase()}
+                                    </Link>
+                                    <div className="flex-1">
+                                        <div className="bg-light-bg/50 dark:bg-dark-bg/50 p-2.5 rounded-2xl rounded-tl-none border border-gray-50 dark:border-gray-900">
+                                            <div className="flex justify-between items-center mb-0.5">
+                                                <Link 
+                                                    to={`/profile/${reply.authorUsername}`}
+                                                    className="font-bold text-[11px] hover:underline"
+                                                >
+                                                    {reply.authorUsername}
+                                                </Link>
+                                                {(user?.id === reply.authorId || user?.id === postAuthorId) && (
+                                                    <button onClick={() => onDelete(reply.id)} className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <TrashIcon />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <p className="text-sm">
+                                                <Link 
+                                                    to={`/profile/${comment.authorUsername}`}
+                                                    className="text-brand-purple font-bold mr-1 hover:underline"
+                                                    >
+                                                    @{comment.authorUsername}
+                                                </Link>
+                                                {reply.content}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center space-x-3 mt-1 ml-1">
+                                            <span className="text-[9px] text-light-subtle">
+                                                {reply.createdAt ? formatDistanceToNow(new Date((reply.createdAt as any).toDate())) : 'Just now'}
+                                            </span>
+                                            {user && (
+                                                <button 
+                                                    onClick={() => {
+                                                        setIsReplying(true);
+                                                        setReplyText(""); // Focuses the parent reply box
+                                                    }} 
+                                                    className="text-[10px] font-bold text-light-subtle hover:text-brand-purple"
+                                                >
+                                                    Reply
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const CommentSection: React.FC<{ postId: string, postAuthorId: string }> = ({ postId, postAuthorId }) => {
     const [comments, setComments] = useState<Comment[]>([]);
     const [newComment, setNewComment] = useState('');
@@ -33,6 +228,7 @@ const CommentSection: React.FC<{ postId: string, postAuthorId: string }> = ({ po
     const user = authContext?.user;
 
     const fetchComments = useCallback(async () => {
+        // We order by asc so the thread builds logically
         const commentsQuery = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "asc"));
         const querySnapshot = await getDocs(commentsQuery);
         const fetchedComments = querySnapshot.docs.map(doc => ({
@@ -46,25 +242,57 @@ const CommentSection: React.FC<{ postId: string, postAuthorId: string }> = ({ po
         fetchComments();
     }, [fetchComments]);
 
-    const handleSubmitComment = async () => {
-        if (!newComment.trim() || !user) return;
-        setLoading(true);
+const handleSubmitDiscussion = async (
+    parentId: string | null = null, 
+    replyToUsername: string | null = null, 
+    replyToName: string | null = null, 
+    content: string | null = null
+) => {
+    const textToPost = content || newComment;
+    if (!textToPost.trim() || !user) return;
+    
+    if (!parentId) setLoading(true);
+
+    try {
+        // 1. Define correctUsername by fetching it from Firestore
+        const userDoc = await getDoc(doc(db, "users", user.id));
+
+        const correctUsername = userDoc.exists() 
+            ? userDoc.data()?.username 
+            : user.username.toLowerCase().replace(/\s+/g, '');
+
         const postRef = doc(db, "posts", postId);
+        
+        // 2. Now 'correctUsername' is defined and can be used below
         await addDoc(collection(postRef, "comments"), {
             postId,
             authorId: user.id,
-            authorUsername: user.username,
-            content: newComment,
-            createdAt: serverTimestamp()
+            authorName: user.username,        
+            authorUsername: correctUsername,  
+            content: textToPost,
+            createdAt: serverTimestamp(),
+            parentId: parentId || null,
+            replyToUsername: replyToUsername || null, 
+            replyToName: replyToName || null          
         });
+
         await updateDoc(postRef, { commentCount: increment(1) });
-        setNewComment('');
-        await fetchComments();
+        
+        setTimeout(async () => {
+            await fetchComments();
+            if (!parentId) {
+                setNewComment('');
+                setLoading(false);
+            }
+        }, 500);
+    } catch (err) {
+        console.error("Submission error:", err);
         setLoading(false);
-    };
+    }
+};
 
     const handleDeleteComment = async (commentId: string) => {
-        if (window.confirm("Are you sure you want to delete this comment?")) {
+        if (window.confirm("Are you sure you want to delete this?")) {
             try {
                 const commentRef = doc(db, "posts", postId, "comments", commentId);
                 await deleteDoc(commentRef);
@@ -72,73 +300,59 @@ const CommentSection: React.FC<{ postId: string, postAuthorId: string }> = ({ po
                 await updateDoc(postRef, { commentCount: increment(-1) });
                 await fetchComments();
             } catch (error) {
-                console.error("Error deleting comment: ", error);
-                alert("Failed to delete comment.");
+                console.error("Error deleting: ", error);
             }
         }
     };
 
+    // Only show top-level discussions in the main map (ones without a parentId)
+    const topLevelDiscussions = comments.filter(c => !c.parentId);
+
     return (
         <div className="mt-12 pt-8 border-t border-gray-200 dark:border-gray-800">
             <h3 className="font-display text-2xl font-bold mb-6">Discussion ({comments.length})</h3>
+            
             {user ? (
-                 <div className="mb-8">
-                     <textarea 
-                         rows={3} 
-                         value={newComment}
-                         onChange={e => setNewComment(e.target.value)}
-                         placeholder="Join the discussion..."
-                         className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-purple"
-                     />
-                     <button 
-                         onClick={handleSubmitComment} 
-                         disabled={loading || !newComment.trim()}
-                         className="mt-3 py-2 px-6 rounded-lg font-semibold text-white bg-brand-purple hover:opacity-90 disabled:opacity-60 transition-all"
-                     >
-                         {loading ? 'Posting...' : 'Post Comment'}
-                     </button>
-                 </div>
+                <div className="mb-10">
+                    <textarea 
+                        rows={3} 
+                        value={newComment}
+                        onChange={e => setNewComment(e.target.value)}
+                        placeholder="Join the discussion..."
+                        className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-gray-300 dark:border-gray-700 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-purple transition-all"
+                    />
+                    <div className="flex justify-end mt-2">
+                        <button 
+                            onClick={() => handleSubmitDiscussion()} 
+                            disabled={loading || !newComment.trim()}
+                            className="py-2 px-8 rounded-full font-bold text-white bg-brand-purple hover:opacity-90 disabled:opacity-60 transition-all shadow-md shadow-brand-purple/20"
+                        >
+                            {loading ? 'Posting...' : 'Post'}
+                        </button>
+                    </div>
+                </div>
             ) : (
-                <p className="mb-8 text-light-subtle dark:text-dark-subtle">You must be logged in to comment.</p>
+                <p className="mb-8 text-sm text-light-subtle dark:text-dark-subtle italic">You must be logged in to join the discussion.</p>
             )}
 
-            <div className="space-y-6">
-                {comments.map(comment => {
-                    const isCommentAuthor = user && user.id === comment.authorId;
-                    const isPostAuthor = user && user.id === postAuthorId;
-                    
-                    return (
-                        <div key={comment.id} className="group flex items-start space-x-4 animate-fade-in-up">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-brand-purple to-brand-yellow flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                                {comment.authorUsername.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="flex-1">
-                                <div className="bg-light-bg dark:bg-dark-bg p-4 rounded-lg rounded-tl-none relative">
-                                    <div className="flex justify-between items-center">
-                                        <p className="font-semibold text-light-text dark:text-dark-text">{comment.authorUsername}</p>
-                                        {(isCommentAuthor || isPostAuthor) && (
-                                            <button 
-                                                onClick={() => handleDeleteComment(comment.id)} 
-                                                className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                title="Delete comment"
-                                            >
-                                                <TrashIcon />
-                                            </button>
-                                        )}
-                                    </div>
-                                    <p className="text-sm text-light-subtle dark:text-dark-subtle mb-2">
-                                        {comment.createdAt ? `${formatDistanceToNow(new Date((comment.createdAt as any).toDate()))} ago` : 'Just now'}
-                                    </p>
-                                    <p className="text-light-text dark:text-dark-text">{comment.content}</p>
-                                </div>
-                            </div>
-                        </div>
-                    )
-                })}
+            <div className="space-y-10">
+                {topLevelDiscussions.map(comment => (
+                    <DiscussionItem 
+                        key={comment.id}
+                        comment={comment}
+                        allComments={comments}
+                        postId={postId}
+                        postAuthorId={postAuthorId}
+                        user={user}
+                        onDelete={handleDeleteComment}
+                        // Ensure all 3 parameters (pId, username, text) are passed here:
+                       onReply={(pId, handle, name, text) => handleSubmitDiscussion(pId, handle, name, text)}
+                    />
+                ))}
             </div>
         </div>
-    )
-}
+    );
+};
 
 
 const PostPage: React.FC = () => {
